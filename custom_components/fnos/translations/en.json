@@ -12,12 +12,20 @@
           "password": "密码",
           "access_code": "Access code (leave empty if disabled)"
         }
+      },
+      "twofa": {
+        "title": "Two-factor authentication",
+        "description": "该账号已开启两步验证，请输入认证器 App 当前的 6 位数字。验证成功后这台设备会被标记为受信，之后不再需要。",
+        "data": {
+          "twofa_code": "6-digit code"
+        }
       }
     },
     "error": {
       "cannot_connect": "无法连接到 fnOS，请检查地址与端口",
       "invalid_auth": "用户名或密码错误",
-      "invalid_access_code": "Invalid access code"
+      "invalid_access_code": "Invalid access code",
+      "invalid_2fa": "Invalid or expired 2FA code"
     },
     "abort": {
       "already_configured": "该 fnOS 主机已配置"

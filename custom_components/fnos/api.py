@@ -52,6 +52,8 @@ ERR_NOT_LOGIN = 4224
 ERR_BAD_CREDENTIAL = 131072
 # 本地错误码（非服务端返回）：访问码校验未通过
 ERR_BAD_ACCESS_CODE = 131073
+# 本地错误码：账号开了两步验证（2FA），需要提交 6 位动态码
+ERR_NEED_2FA = 131074
 ERR_NO_ROUTE = 10000002
 ERR_APP_NOT_INSTALLED = 266240
 
@@ -156,7 +158,7 @@ class FnOsClient:
     """fnOS WS 客户端：线程安全、断线自动重连重登。"""
 
     def __init__(self, host, port, username, password, ssl=False,
-                 access_code=None):
+                 access_code=None, twofa_code=None):
         parsed = urlparse(host if "://" in str(host) else f"//{host}")
         self.host = parsed.hostname or str(host)
         self.port = int(port or 5666)
@@ -166,6 +168,10 @@ class FnOsClient:
         # fnOS 1.2.0302+「访问码」：网关前置校验，通过后下发 os-access-code cookie
         self.access_code = (access_code or "").strip() or None
         self._access_cookie = None
+        # 两步验证：仅在配置流程里一次性使用，拿到受信设备后不再需要
+        self.twofa_code = (str(twofa_code).strip() if twofa_code else None)
+        self._twofa_token = None
+        self._did = self._gen_did()
         scheme = "wss" if self.ssl else "ws"
         self.ws_url = f"{scheme}://{self.host}:{self.port}/websocket?type=main"
         self.http_base = f"{'https' if self.ssl else 'http'}://{self.host}:{self.port}"
@@ -202,6 +208,14 @@ class FnOsClient:
         if not self.token:
             self._connect()  # 建连 + getRSAPub + 登录（阻塞 IO，仅 executor 线程调）
         return self.token
+
+    @staticmethod
+    def _gen_did():
+        """设备 ID（两步验证时服务端用来标识设备，随机生成即可）。"""
+        t = base64.b32encode(str(int(time.time() * 1000)).encode()).decode()
+        e = base64.b32encode(str(random.random()).encode()).decode()[:15]
+        n = base64.b32encode(str(random.random()).encode()).decode()[:15]
+        return f"{t}-{e}-{n}".lower().replace("=", "")
 
     def _ensure_access_code(self):
         """fnOS「访问码」前置校验，返回 Cookie 片段 `os-access-code=...`。
@@ -330,7 +344,7 @@ class FnOsClient:
                 "req": "user.login", "reqid": self._reqid(),
                 "user": self.username, "password": self.password,
                 "deviceType": "HomeAssistant", "deviceName": "Home Assistant",
-                "stay": True, "si": self._si,
+                "stay": True, "did": self._did, "si": self._si,
             },
             separators=(",", ":"),
         )
@@ -352,11 +366,57 @@ class FnOsClient:
         # 实测登录响应可能把字段平铺在顶层（getRSAPub 即如此），data 与顶层合并兼容
         data = resp.get("data") if isinstance(resp.get("data"), dict) else {}
         data = {**resp, **data}
+        # 账号开了两步验证且当前设备未受信：服务端返回 accessToken，等第二步校验
+        if data.get("isTwofaEnforced") and not data.get("isTrustedDevice"):
+            self._twofa_token = data.get("accessToken")
+            if not self.twofa_code:
+                raise FnOsApiError("该账号已开启两步验证，需要输入 6 位动态码",
+                                   errno=ERR_NEED_2FA)
+            self._submit_twofa(self.twofa_code)
+            return
+        self._apply_login_data(resp, data)
+
+    def _submit_twofa(self, code):
+        """提交 6 位两步验证码（user.2fa.loginVerify），成功后按普通登录收尾。
+
+        isTrustedDevice=True 会把这台设备加入受信列表，之后重连不必再输码。
+        """
+        body = json.dumps(
+            {
+                "req": "user.2fa.loginVerify", "reqid": self._reqid(),
+                "code": str(code).strip(), "isTrustedDevice": True,
+                "accessToken": self._twofa_token, "stay": 1,
+                "deviceType": "HomeAssistant", "deviceName": "Home Assistant",
+                "did": self._did, "si": self._si,
+            },
+            separators=(",", ":"),
+        )
+        rsa_b64 = base64.b64encode(
+            PKCS1_v1_5.new(RSA.import_key(self._rsa_pub)).encrypt(
+                self._aes_key.encode())
+        ).decode()
+        aes_b64 = base64.b64encode(
+            AES.new(self._aes_key.encode(), AES.MODE_CBC, self._aes_iv).encrypt(
+                pad(body.encode(), AES.block_size))
+        ).decode()
+        frame = json.dumps(
+            {"req": "encrypted", "iv": base64.b64encode(self._aes_iv).decode(),
+             "rsa": rsa_b64, "aes": aes_b64},
+            separators=(",", ":"),
+        )
+        rid = json.loads(body)["reqid"]
+        resp = self._raw_request(rid, frame, timeout=20)
+        data = resp.get("data") if isinstance(resp.get("data"), dict) else {}
+        data = {**resp, **data}
         if resp.get("errno") not in (None, 0) or not data.get("secret"):
             errno = resp.get("errno")
-            if errno == ERR_BAD_CREDENTIAL:
-                raise FnOsApiError("用户名或密码错误", errno)
-            raise FnOsApiError(f"fnOS 登录失败：errno={errno}", errno)
+            if errno in (ERR_BAD_CREDENTIAL, ERR_BAD_ACCESS_CODE) or data.get("result") == "failed":
+                raise FnOsApiError("两步验证码错误或已过期", ERR_BAD_CREDENTIAL)
+            raise FnOsApiError(f"两步验证失败：errno={errno}", errno)
+        self._apply_login_data(resp, data)
+
+    def _apply_login_data(self, resp, data):
+        """普通登录 / 两步验证成功后的公共收尾：解出签名密钥、token、置位。"""
         secret = base64.b64decode(data["secret"])
         plain = unpad(
             AES.new(self._aes_key.encode(), AES.MODE_CBC, self._aes_iv).decrypt(

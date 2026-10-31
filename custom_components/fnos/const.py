@@ -13,6 +13,8 @@ CONF_UPDATE_INTERVAL = "update_interval"
 CONF_WEB_BASE_URL = "web_base_url"
 # fnOS 1.2.0302+「访问码」：网关前置校验（可选，未开启留空）
 CONF_ACCESS_CODE = "access_code"
+# 两步验证动态码（仅配置流程一次性使用）
+CONF_2FA_CODE = "twofa_code"
 
 DEFAULT_PORT = 5666
 DEFAULT_UPDATE_INTERVAL = 30
