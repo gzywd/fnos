@@ -36,8 +36,9 @@
       "init": {
         "title": "飞牛 fnOS 选项",
         "data": {
-          "update_interval": "数据刷新间隔（秒，10-3600）",
-          "web_base_url": "访问基地址（留空自动跟随浏览器地址栏；例如 http://nas.example.com:8123）"
+          "update_interval": "刷新间隔（秒）",
+          "web_base_url": "访问基地址（留空自动）",
+          "disk_info": "读取硬盘清单与健康（会唤醒休眠中的机械盘，默认关闭）"
         }
       }
     }

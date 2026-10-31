@@ -142,9 +142,14 @@ def _prune_devices(hass, entry, live_dynamic):
             dev_reg.async_remove_device(device.id)
 
 
+async def _async_reload_entry(hass, entry):
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """加载配置条目。"""
     hass.data.setdefault(DOMAIN, {})
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     client = FnOsClient(
         host=entry.data["host"],
         port=entry.data.get("port", 5666),
@@ -153,6 +158,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         ssl=entry.data.get("ssl", False),
         access_code=entry.data.get("access_code"),
         did=entry.data.get("did"),
+        disk_info=entry.options.get("disk_info", False),
     )
     coordinator = FnOsCoordinator(hass, entry, client)
     hass.data[DOMAIN][entry.entry_id] = {

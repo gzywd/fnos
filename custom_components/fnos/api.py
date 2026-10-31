@@ -166,7 +166,8 @@ class FnOsClient:
     """fnOS WS 客户端：线程安全、断线自动重连重登。"""
 
     def __init__(self, host, port, username, password, ssl=False,
-                 access_code=None, twofa_code=None, did=None):
+                 access_code=None, twofa_code=None, did=None,
+                 disk_info=False):
         parsed = urlparse(host if "://" in str(host) else f"//{host}")
         self.host = parsed.hostname or str(host)
         self.port = int(port or 5666)
@@ -182,6 +183,9 @@ class FnOsClient:
         # did 是设备身份，服务端按它记「受信设备」；必须跨重启复用，
         # 否则每次重连都是新设备，账号开了 2FA 就会反复要动态码
         self._did = (str(did).strip() if did else "") or gen_did()
+        # stor.listDisk 会唤醒机械盘（实测：调用后 standby → active/idle），
+        # 默认不读，保证休眠中的硬盘不被 HA 轮询吵醒
+        self.disk_info = bool(disk_info)
         scheme = "wss" if self.ssl else "ws"
         self.ws_url = f"{scheme}://{self.host}:{self.port}/websocket?type=main"
         self.http_base = f"{'https' if self.ssl else 'http'}://{self.host}:{self.port}"
@@ -733,9 +737,13 @@ class FnOsClient:
         pools_p = self.payload("stor.state2")
         pools = (pools_p.get("state")
                  if isinstance(pools_p.get("state"), list) else [])
-        disks_p = self.payload("stor.listDisk")
-        disks = (disks_p.get("disk")
-                 if isinstance(disks_p.get("disk"), list) else [])
+        if self.disk_info:
+            disks_p = self.payload("stor.listDisk")
+            disks = (disks_p.get("disk")
+                     if isinstance(disks_p.get("disk"), list) else [])
+        else:
+            # 关掉：不碰硬盘，磁盘清单/健康类实体保持未知
+            disks = []
         total = _first_key(calc, "fssizeStor", "total", "totalSize")
         free = _first_key(calc, "frsizeStor", "free", "freeSize")
         used = None

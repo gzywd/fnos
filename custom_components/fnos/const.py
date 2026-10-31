@@ -17,6 +17,8 @@ CONF_ACCESS_CODE = "access_code"
 CONF_2FA_CODE = "twofa_code"
 # 设备身份（服务端按它记受信设备，必须持久化）
 CONF_DID = "did"
+# 是否读取硬盘清单（stor.listDisk 会唤醒休眠中的机械盘，默认关闭）
+CONF_DISK_INFO = "disk_info"
 
 DEFAULT_PORT = 5666
 DEFAULT_UPDATE_INTERVAL = 30

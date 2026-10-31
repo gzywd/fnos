@@ -22,6 +22,7 @@ from .const import (
     CONF_2FA_CODE,
     CONF_ACCESS_CODE,
     CONF_DID,
+    CONF_DISK_INFO,
     CONF_UPDATE_INTERVAL,
     CONF_WEB_BASE_URL,
     CONF_SSL,
@@ -153,10 +154,10 @@ class FnOsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class FnOsOptionsFlow(config_entries.OptionsFlow):
-    """选项：数据刷新间隔 / 显式访问基地址。"""
+    """选项：数据刷新间隔 / 访问基地址 / 是否读硬盘信息。"""
 
-    def __init__(self, config_entry):
-        self.config_entry = config_entry
+    def __init__(self) -> None:
+        """HA 自己注入 config_entry，这里不能再接收参数。"""
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
@@ -175,6 +176,11 @@ class FnOsOptionsFlow(config_entries.OptionsFlow):
                     default=self.config_entry.options.get(
                         CONF_WEB_BASE_URL, ""),
                 ): str,
+                vol.Optional(
+                    CONF_DISK_INFO,
+                    default=self.config_entry.options.get(
+                        CONF_DISK_INFO, False),
+                ): bool,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
