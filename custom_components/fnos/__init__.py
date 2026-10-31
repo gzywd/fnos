@@ -152,6 +152,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         password=entry.data["password"],
         ssl=entry.data.get("ssl", False),
         access_code=entry.data.get("access_code"),
+        did=entry.data.get("did"),
     )
     coordinator = FnOsCoordinator(hass, entry, client)
     hass.data[DOMAIN][entry.entry_id] = {

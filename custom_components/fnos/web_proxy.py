@@ -810,7 +810,8 @@ def _page_client(hass, entry_id):
     data = entry.data
     sig = (str(data["host"]), int(data.get("port", 5666)),
            str(data["username"]), str(data["password"]),
-           bool(data.get("ssl", False)), str(data.get("access_code") or ""))
+           bool(data.get("ssl", False)), str(data.get("access_code") or ""),
+           str(data.get("did") or ""))
     client = clients.get(entry_id)
     if client is not None and getattr(client, "cred_sig", None) != sig:
         try:
@@ -822,7 +823,7 @@ def _page_client(hass, entry_id):
         from .api import FnOsClient
 
         client = FnOsClient(host=sig[0], port=sig[1], username=sig[2],
-                            password=sig[3], ssl=sig[4], access_code=sig[5])
+                            password=sig[3], ssl=sig[4], access_code=sig[5], did=sig[6])
         client.cred_sig = sig
         clients[entry_id] = client
     return client

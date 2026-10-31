@@ -154,11 +154,19 @@ def _photo_qs(params):
     return "&".join(parts)
 
 
+def gen_did():
+    """生成设备 ID（形如 00000000-xxxx-yyyy，服务端用它区分设备）。"""
+    t = base64.b32encode(str(int(time.time() * 1000)).encode()).decode()
+    e = base64.b32encode(str(random.random()).encode()).decode()[:15]
+    n = base64.b32encode(str(random.random()).encode()).decode()[:15]
+    return f"{t}-{e}-{n}".lower().replace("=", "")
+
+
 class FnOsClient:
     """fnOS WS 客户端：线程安全、断线自动重连重登。"""
 
     def __init__(self, host, port, username, password, ssl=False,
-                 access_code=None, twofa_code=None):
+                 access_code=None, twofa_code=None, did=None):
         parsed = urlparse(host if "://" in str(host) else f"//{host}")
         self.host = parsed.hostname or str(host)
         self.port = int(port or 5666)
@@ -171,7 +179,9 @@ class FnOsClient:
         # 两步验证：仅在配置流程里一次性使用，拿到受信设备后不再需要
         self.twofa_code = (str(twofa_code).strip() if twofa_code else None)
         self._twofa_token = None
-        self._did = self._gen_did()
+        # did 是设备身份，服务端按它记「受信设备」；必须跨重启复用，
+        # 否则每次重连都是新设备，账号开了 2FA 就会反复要动态码
+        self._did = (str(did).strip() if did else "") or gen_did()
         scheme = "wss" if self.ssl else "ws"
         self.ws_url = f"{scheme}://{self.host}:{self.port}/websocket?type=main"
         self.http_base = f"{'https' if self.ssl else 'http'}://{self.host}:{self.port}"
@@ -208,14 +218,6 @@ class FnOsClient:
         if not self.token:
             self._connect()  # 建连 + getRSAPub + 登录（阻塞 IO，仅 executor 线程调）
         return self.token
-
-    @staticmethod
-    def _gen_did():
-        """设备 ID（两步验证时服务端用来标识设备，随机生成即可）。"""
-        t = base64.b32encode(str(int(time.time() * 1000)).encode()).decode()
-        e = base64.b32encode(str(random.random()).encode()).decode()[:15]
-        n = base64.b32encode(str(random.random()).encode()).decode()[:15]
-        return f"{t}-{e}-{n}".lower().replace("=", "")
 
     def _ensure_access_code(self):
         """fnOS「访问码」前置校验，返回 Cookie 片段 `os-access-code=...`。

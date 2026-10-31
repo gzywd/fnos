@@ -16,10 +16,12 @@ from .api import (
     ERR_NEED_2FA,
     FnOsApiError,
     FnOsClient,
+    gen_did,
 )
 from .const import (
     CONF_2FA_CODE,
     CONF_ACCESS_CODE,
+    CONF_DID,
     CONF_UPDATE_INTERVAL,
     CONF_WEB_BASE_URL,
     CONF_SSL,
@@ -69,6 +71,7 @@ def _validate(hass, data):
             ssl=data.get(CONF_SSL, False),
             access_code=data.get(CONF_ACCESS_CODE),
             twofa_code=data.get(CONF_2FA_CODE),
+            did=data.get(CONF_DID),
         )
         try:
             client.must("appcgi.sysinfo.getHostName")
@@ -114,6 +117,9 @@ class FnOsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         errors = {}
         if user_input is not None:
+            # 设备身份只生成一次并随条目保存：服务端靠它记住「受信设备」，
+            # 换了 did 就等于换了新设备，开了 2FA 会反复要动态码
+            user_input.setdefault(CONF_DID, gen_did())
             await self.async_set_unique_id(
                 f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}")
             self._abort_if_unique_id_configured()

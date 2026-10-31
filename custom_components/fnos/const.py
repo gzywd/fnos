@@ -15,6 +15,8 @@ CONF_WEB_BASE_URL = "web_base_url"
 CONF_ACCESS_CODE = "access_code"
 # 两步验证动态码（仅配置流程一次性使用）
 CONF_2FA_CODE = "twofa_code"
+# 设备身份（服务端按它记受信设备，必须持久化）
+CONF_DID = "did"
 
 DEFAULT_PORT = 5666
 DEFAULT_UPDATE_INTERVAL = 30
