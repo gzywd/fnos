@@ -131,6 +131,17 @@ sensor.fnos_all_entities            # 聚合实体
 | 端口 | 默认 `5666`；HTTPS 版为 `5667` |
 | 使用 HTTPS/WSS | 上游启用 HTTPS 时勾选 |
 | 用户名 / 密码 | fnOS 账号（建议使用有管理员权限的账号） |
+| 访问码 | **可选**，fnOS 1.2.0302+ 开启「访问码」后必填，未开启留空 |
+
+> **访问码说明（本 fork 新增，v1.0.2）**
+>
+> fnOS 1.2.0302 起新增「访问码」：系统设置 → 安全性 → 访问设置 → 访问码。开启后网关会对**所有入口**做前置校验，未通过时连 WebSocket 升级都返回 `401`，原版集成因此无法连接（`Handshake status 401 Unauthorized`）。
+>
+> 本 fork 在建立 WebSocket 前先调用 `GET /access_code_verify`（头 `x-access-code: base64(访问码)`、`x-access-source: web`），拿到 `os-access-code` Cookie 后带入握手，即可正常登录。
+>
+> - 访问码填错 → 提示「访问码错误，请检查后重试」
+> - 访问码留空但设备已开启 → 连接时报 401，请补填
+> - 忘记访问码：SSH 登录 NAS 后 `sudo /usr/trim/bin/security_service --access-code`
 
 3. 集成 → 配置 → 选项：
 

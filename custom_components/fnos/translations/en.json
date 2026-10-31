@@ -9,13 +9,15 @@
           "port": "端口（默认 5666，HTTPS 版为 5667）",
           "ssl": "使用 HTTPS/WSS",
           "username": "用户名",
-          "password": "密码"
+          "password": "密码",
+          "access_code": "Access code (leave empty if disabled)"
         }
       }
     },
     "error": {
       "cannot_connect": "无法连接到 fnOS，请检查地址与端口",
-      "invalid_auth": "用户名或密码错误"
+      "invalid_auth": "用户名或密码错误",
+      "invalid_access_code": "Invalid access code"
     },
     "abort": {
       "already_configured": "该 fnOS 主机已配置"

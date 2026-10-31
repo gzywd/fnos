@@ -10,8 +10,9 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNA
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
-from .api import ERR_BAD_CREDENTIAL, FnOsApiError, FnOsClient
+from .api import ERR_BAD_ACCESS_CODE, ERR_BAD_CREDENTIAL, FnOsApiError, FnOsClient
 from .const import (
+    CONF_ACCESS_CODE,
     CONF_UPDATE_INTERVAL,
     CONF_WEB_BASE_URL,
     CONF_SSL,
@@ -31,6 +32,7 @@ STEP_USER_SCHEMA = vol.Schema(
         vol.Required(CONF_SSL, default=False): bool,
         vol.Required(CONF_USERNAME, default="admin"): str,
         vol.Required(CONF_PASSWORD): str,
+        vol.Optional(CONF_ACCESS_CODE, default=""): str,
     }
 )
 
@@ -52,6 +54,7 @@ def _validate(hass, data):
             host=data[CONF_HOST], port=data[CONF_PORT],
             username=data[CONF_USERNAME], password=data[CONF_PASSWORD],
             ssl=data.get(CONF_SSL, False),
+            access_code=data.get(CONF_ACCESS_CODE),
         )
         try:
             client.must("appcgi.sysinfo.getHostName")
@@ -78,6 +81,8 @@ class FnOsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except FnOsApiError as err:
                 if err.errno == ERR_BAD_CREDENTIAL:
                     errors["base"] = "invalid_auth"
+                elif err.errno == ERR_BAD_ACCESS_CODE:
+                    errors["base"] = "invalid_access_code"
                 else:
                     errors["base"] = "cannot_connect"
             except Exception:  # pylint: disable=broad-except

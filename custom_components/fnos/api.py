@@ -50,6 +50,8 @@ _LOGGER = logging.getLogger(__name__)
 
 ERR_NOT_LOGIN = 4224
 ERR_BAD_CREDENTIAL = 131072
+# 本地错误码（非服务端返回）：访问码校验未通过
+ERR_BAD_ACCESS_CODE = 131073
 ERR_NO_ROUTE = 10000002
 ERR_APP_NOT_INSTALLED = 266240
 
@@ -153,13 +155,17 @@ def _photo_qs(params):
 class FnOsClient:
     """fnOS WS 客户端：线程安全、断线自动重连重登。"""
 
-    def __init__(self, host, port, username, password, ssl=False):
+    def __init__(self, host, port, username, password, ssl=False,
+                 access_code=None):
         parsed = urlparse(host if "://" in str(host) else f"//{host}")
         self.host = parsed.hostname or str(host)
         self.port = int(port or 5666)
         self.ssl = bool(ssl)
         self.username = username
         self.password = password
+        # fnOS 1.2.0302+「访问码」：网关前置校验，通过后下发 os-access-code cookie
+        self.access_code = (access_code or "").strip() or None
+        self._access_cookie = None
         scheme = "wss" if self.ssl else "ws"
         self.ws_url = f"{scheme}://{self.host}:{self.port}/websocket?type=main"
         self.http_base = f"{'https' if self.ssl else 'http'}://{self.host}:{self.port}"
@@ -197,12 +203,61 @@ class FnOsClient:
             self._connect()  # 建连 + getRSAPub + 登录（阻塞 IO，仅 executor 线程调）
         return self.token
 
+    def _ensure_access_code(self):
+        """fnOS「访问码」前置校验，返回 Cookie 片段 `os-access-code=...`。
+
+        fnOS 1.2.0302 起网关（nginx）对全部入口做前置校验：没通过时连 WebSocket
+        升级都会被 401 挡掉。校验协议（逆向自 /access-code 页面内联脚本）：
+
+            GET /access_code_verify
+            x-access-code: base64(utf8(访问码))
+            x-access-source: web
+            -> 204 No Content + Set-Cookie: os-access-code=...; Path=/
+
+        未配置访问码（或服务端未开启该功能）时返回 None，后续流程与旧版一致。
+        """
+        if not self.access_code:
+            return None
+        if self._access_cookie:
+            return self._access_cookie
+
+        token = base64.b64encode(self.access_code.encode("utf-8")).decode()
+        req = urllib.request.Request(
+            f"{self.http_base}/access_code_verify", method="GET",
+            headers={"x-access-code": token, "x-access-source": "web"},
+        )
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(req, timeout=15) as resp:
+                raw = resp.headers.get("Set-Cookie") or ""
+        except urllib.error.HTTPError as err:
+            if err.code in (401, 403, 429):
+                raise FnOsApiError("访问码错误", errno=ERR_BAD_ACCESS_CODE) from err
+            raise FnOsApiError(f"访问码校验失败：HTTP {err.code}") from err
+        except (OSError, urllib.error.URLError) as err:
+            raise FnOsApiError(f"访问码校验请求失败：{err}") from err
+
+        cookie = ""
+        for part in raw.split(","):
+            piece = part.strip().split(";")[0].strip()
+            if piece.startswith("os-access-code="):
+                cookie = piece
+                break
+        if not cookie:
+            _LOGGER.debug("访问码校验未下发 os-access-code cookie，按未启用处理")
+            return None
+        self._access_cookie = cookie
+        _LOGGER.debug("访问码校验通过，已获取 os-access-code cookie")
+        return cookie
+
     def _connect(self):
         self._close_ws()
         timeout = 15
+        cookie = self._ensure_access_code()
         self._ws = websocket.create_connection(
             self.ws_url, timeout=timeout,
             sslopt={"cert_reqs": 0} if self.ssl else None,
+            cookie=cookie,
         )
         self._logged_in = False
         self._pending = {}
