@@ -333,7 +333,9 @@ class FnOsRecentPhotosSensor(ForcedEntityIdMixin, SensorEntity):
     def extra_state_attributes(self):
         if not self._urls:
             return None
-        return {"数量": len(self._urls), "原图下载地址": self._urls}
+        # HA 对单实体属性有 16KB 上限，超出会被 Recorder 拒绝入库并反复告警；
+        # 60 张原图签名 URL 约 20KB，这里只暴露前 12 张（数量仍报全量）
+        return {"数量": len(self._urls), "原图下载地址": self._urls[:12]}
 
     async def async_update(self):
         store = self.hass.data.get(DOMAIN) or {}
