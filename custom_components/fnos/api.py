@@ -939,6 +939,24 @@ class FnOsClient:
             "domains": domains if isinstance(domains, list) else [],
         }
 
+    def _rest_cookie(self):
+        """REST 请求的 Cookie：fnos-token + 访问码 cookie。
+
+        开了「访问码」的机器上，网关对不带 os-access-code 的请求会直接回
+        SPA 首页（HTTP 200 + HTML），集成把它当 JSON 解析就失败，表现成
+        「虚拟机 App 不可用」「下载中心不可用」这类假阴性。
+        """
+        parts = [f"fnos-token={self.token}"]
+        cookie = self._access_cookie
+        if not cookie:
+            try:
+                cookie = self._ensure_access_code()
+            except Exception:  # pylint: disable=broad-except
+                cookie = None
+        if cookie:
+            parts.append(cookie)
+        return "; ".join(parts)
+
     def _http_json(self, method, path, payload=None, timeout=15,
                    base=_VM_API_BASE):
         """调 fnOS REST API（默认 /vm/api/v1，可指定 /app-center/v1 等基路径）。
@@ -954,7 +972,7 @@ class FnOsClient:
         url = f"{self.http_base}{base}{path}"
         body = None
         headers = {
-            "Cookie": f"fnos-token={self.token}",
+            "Cookie": self._rest_cookie(),
             "Accept": "application/json",
         }
         if payload is not None:
@@ -1048,7 +1066,7 @@ class FnOsClient:
              _PHOTO_APIKEY]).encode()).hexdigest()
         url = (f"{self.http_base}/p/api/v1/explore/recent_photos?{qs}")
         req = urllib.request.Request(url, headers={
-            "Cookie": f"fnos-token={self.token}",
+            "Cookie": self._rest_cookie(),
             "accessToken": self.token,
             "authx": f"nonce={nonce}&timestamp={ts}&sign={sign}",
             "Accept": "application/json",
@@ -1123,7 +1141,7 @@ class FnOsClient:
                 urllib.request.ProxyHandler({}))
         url = f"{self.http_base}/app-center/v1/app/installed?language=zh-CN"
         req = urllib.request.Request(url, headers={
-            "Cookie": f"fnos-token={self.token}",
+            "Cookie": self._rest_cookie(),
             "Authorization": f"trim {self.token}",
             "Accept": "application/json",
         })
