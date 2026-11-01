@@ -343,6 +343,9 @@ class FnOsRecentPhotosSensor(ForcedEntityIdMixin, SensorEntity):
         client = getattr(coord, "client", None)
         if client is None:
             return
+        if not getattr(client, "media_info", False):
+            # 默认关闭：缩略图拉取会占用客户端锁十余秒，导致 WS 超时重连、反复登录
+            return
         try:
             photos = await self.hass.async_add_executor_job(
                 client.photo_recent, 0, 60)

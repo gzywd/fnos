@@ -167,7 +167,7 @@ class FnOsClient:
 
     def __init__(self, host, port, username, password, ssl=False,
                  access_code=None, twofa_code=None, did=None,
-                 disk_info=False):
+                 disk_info=False, media_info=False):
         parsed = urlparse(host if "://" in str(host) else f"//{host}")
         self.host = parsed.hostname or str(host)
         self.port = int(port or 5666)
@@ -186,6 +186,7 @@ class FnOsClient:
         # stor.listDisk 会唤醒机械盘（实测：调用后 standby → active/idle），
         # 默认不读，保证休眠中的硬盘不被 HA 轮询吵醒
         self.disk_info = bool(disk_info)
+        self.media_info = bool(media_info)
         scheme = "wss" if self.ssl else "ws"
         self.ws_url = f"{scheme}://{self.host}:{self.port}/websocket?type=main"
         self.http_base = f"{'https' if self.ssl else 'http'}://{self.host}:{self.port}"
@@ -278,6 +279,9 @@ class FnOsClient:
             self.ws_url, timeout=timeout,
             sslopt={"cert_reqs": 0} if self.ssl else None,
             cookie=cookie,
+            # 服务端会断开空闲连接（30~60 秒），不心跳就会每轮轮询重连+重登，
+            # 把 fnOS 的「登录日志」刷屏
+            ping_interval=15, ping_timeout=10,
         )
         self._logged_in = False
         self._pending = {}
@@ -319,6 +323,11 @@ class FnOsClient:
                 break
             try:
                 raw = ws.recv()
+            except websocket.WebSocketTimeoutException:
+                # 只是这段时间没有数据（socket 超时设的 15 秒），不是断线；
+                # 早期版本把它当致命错误，接收线程退出 → 每轮轮询都重连重登，
+                # fnOS 的登录日志就是这样被刷屏的
+                continue
             except Exception:  # pylint: disable=broad-except
                 break
             if not raw:

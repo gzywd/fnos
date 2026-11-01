@@ -23,6 +23,7 @@ from .const import (
     CONF_ACCESS_CODE,
     CONF_DID,
     CONF_DISK_INFO,
+    CONF_MEDIA_INFO,
     CONF_UPDATE_INTERVAL,
     CONF_WEB_BASE_URL,
     CONF_SSL,
@@ -180,6 +181,11 @@ class FnOsOptionsFlow(config_entries.OptionsFlow):
                     CONF_DISK_INFO,
                     default=self.config_entry.options.get(
                         CONF_DISK_INFO, False),
+                ): bool,
+                vol.Optional(
+                    CONF_MEDIA_INFO,
+                    default=self.config_entry.options.get(
+                        CONF_MEDIA_INFO, False),
                 ): bool,
             }
         )

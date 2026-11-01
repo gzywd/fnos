@@ -19,6 +19,8 @@ CONF_2FA_CODE = "twofa_code"
 CONF_DID = "did"
 # 是否读取硬盘清单（stor.listDisk 会唤醒休眠中的机械盘，默认关闭）
 CONF_DISK_INFO = "disk_info"
+# 是否拉相册/影视缩略图（会拖慢轮询并造成反复重连登录，默认关闭）
+CONF_MEDIA_INFO = "media_info"
 
 DEFAULT_PORT = 5666
 DEFAULT_UPDATE_INTERVAL = 30

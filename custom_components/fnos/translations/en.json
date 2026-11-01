@@ -38,7 +38,8 @@
         "data": {
           "update_interval": "Update interval (seconds)",
           "web_base_url": "Base URL (auto if empty)",
-          "disk_info": "Read disk list & health (wakes sleeping HDDs, default off)"
+          "disk_info": "Read disk list & health (wakes sleeping HDDs, default off)",
+          "media_info": "Fetch photo/video thumbnails (slows polling, default off)"
         }
       }
     }

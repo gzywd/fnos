@@ -16,5 +16,5 @@
     "websocket-client>=1.6.0",
     "pycryptodome>=3.19.0"
   ],
-  "version": "1.0.7"
+  "version": "1.0.8"
 }
